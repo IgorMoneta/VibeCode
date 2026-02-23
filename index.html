@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças Inteligentes</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans">
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+        const App = () => {
+            // Load selected month
+            const [selectedMonth, setSelectedMonth] = useState(() => {
+                const savedMonth = localStorage.getItem('selectedMonth');
+                return savedMonth || new Date().toISOString().slice(0, 7);
+            });
+            // Load data from LocalStorage
+            const [monthlyData, setMonthlyData] = useState(() => {
+                const savedData = localStorage.getItem('financeData');
+                if (savedData) {
+                    return JSON.parse(savedData);
+                }
+                return {
+                    [selectedMonth]: { salary: 0, expenses: [], investments: [] }
+                };
+            });
+            // Inputs
+            const [expenseDesc, setExpenseDesc] = useState('');
+            const [expenseValue, setExpenseValue] = useState('');
+            const [investmentDesc, setInvestmentDesc] = useState('');
+            const [investmentValue, setInvestmentValue] = useState('');
+            const [productPrice, setProductPrice] = useState('');
+            const [purchaseAnalysis, setPurchaseAnalysis] = useState(null);
+            // Save to LocalStorage whenever data changes
+            useEffect(() => {
+                localStorage.setItem('financeData', JSON.stringify(monthlyData));
+            }, [monthlyData]);
+            useEffect(() => {
+                localStorage.setItem('selectedMonth', selectedMonth);
+            }, [selectedMonth]);
+            // Initialize Lucide Icons after every render
+            useEffect(() => {
+                lucide.createIcons();
+            });
+            const currentMonthData = monthlyData[selectedMonth] || { salary: 0, expenses: [], investments: [] };
+            const salary = currentMonthData.salary || 0;
+            const expenses = currentMonthData.expenses || [];
+            const investments = currentMonthData.investments || [];
+            const totalExpenses = useMemo(() =>
+                expenses.reduce((acc, curr) => acc + curr.value, 0),
+                [expenses]);
+            const totalInvested = useMemo(() =>
+                investments.reduce((acc, curr) => acc + curr.value, 0),
+                [investments]);
+            const balance = useMemo(() =>
+                salary - totalExpenses - totalInvested,
+                [salary, totalExpenses, totalInvested]);
+            const MIN_INVESTMENT = 1000;
+            const chartData = useMemo(() => {
+                return Object.keys(monthlyData)
+                    .sort()
+                    .map(month => {
+                        const data = monthlyData[month];
+                        const totalExp = data.expenses.reduce((acc, curr) => acc + curr.value, 0);
+                        const [year, monthNum] = month.split('-');
+                        const monthLabel = new Date(year, monthNum - 1).toLocaleString('pt-BR', { month: 'short' });
+                        return { label: `${monthLabel}/${year.slice(2)}`, value: totalExp, key: month };
+                    });
+            }, [monthlyData]);
+            const maxExpenseInHistory = Math.max(...chartData.map(d => d.value), 100);
+            const linePath = useMemo(() => {
+                if (chartData.length < 2) return "";
+                const width = 800;
+                const height = 150;
+                const padding = 40;
+                const points = chartData.map((d, i) => {
+                    const x = padding + (i * (width - 2 * padding) / (chartData.length - 1));
+                    const y = height - padding - (d.value / maxExpenseInHistory * (height - 2 * padding));
+                    return `${x},${y}`;
+                });
+                return `M ${points.join(' L ')}`;
+            }, [chartData, maxExpenseInHistory]);
+            const updateCurrentMonth = (updates) => {
+                setMonthlyData(prev => ({
+                    ...prev,
+                    [selectedMonth]: {
+                        ...currentMonthData, // fallback handled above
+                        ...updates
+                    }
+                }));
+            };
+            const addExpense = (e) => {
+                e.preventDefault();
+                if (!expenseDesc || !expenseValue) return;
+                const newValue = parseFloat(expenseValue);
+                updateCurrentMonth({ expenses: [...expenses, { id: Date.now(), desc: expenseDesc, value: newValue }] });
+                setExpenseDesc('');
+                setExpenseValue('');
+            };
+            const addInvestment = (e) => {
+                e.preventDefault();
+                const val = parseFloat(investmentValue);
+                if (!investmentDesc || isNaN(val)) return;
+                if (val < MIN_INVESTMENT) {
+                    alert(`O investimento mínimo permitido é de R$ ${MIN_INVESTMENT.toLocaleString('pt-BR')}`);
+                    return;
+                }
+                updateCurrentMonth({ investments: [...investments, { id: Date.now(), desc: investmentDesc, value: val }] });
+                setInvestmentDesc('');
+                setInvestmentValue('');
+            };
+            const removeExpense = (id) => updateCurrentMonth({ expenses: expenses.filter(e => e.id !== id) });
+            const removeInvestment = (id) => updateCurrentMonth({ investments: investments.filter(i => i.id !== id) });
+            const analyzePurchase = () => {
+                const price = parseFloat(productPrice);
+                if (isNaN(price) || price <= 0 || salary <= 0) return;
+                const now = new Date();
+                const isCurrentMonth = selectedMonth === now.toISOString().slice(0, 7);
+                const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                const currentDay = isCurrentMonth ? now.getDate() : 1;
+                const daysRemaining = daysInMonth - currentDay + 1;
+                const averageDailySpent = expenses.length > 0 ? (totalExpenses / Math.max(currentDay, 1)) : 30;
+                const projectedNeeds = averageDailySpent * daysRemaining;
+                const investmentGap = Math.max(0, MIN_INVESTMENT - totalInvested);
+                const safetyBuffer = projectedNeeds + investmentGap;
+                const trueDisposableIncome = balance - safetyBuffer;
+                let result = {
+                    canBuy: false,
+                    message: "",
+                    type: "error",
+                    details: { projected: projectedNeeds, gap: investmentGap, disposable: trueDisposableIncome },
+                    bestInstallment: null
+                };
+                if (price <= trueDisposableIncome) {
+                    result.canBuy = true;
+                    result.message = "Excelente! Você pode comprar à vista. Isso não compromete seu investimento nem o resto do seu mês.";
+                    result.type = "success";
+                    result.bestInstallment = { count: 1, value: price };
+                } else {
+                    const safeMonthlyMargin = salary * 0.20;
+                    let foundInstallment = null;
+                    for (let i = 2; i <= 12; i++) {
+                        const monthlyValue = price / i;
+                        if (monthlyValue <= safeMonthlyMargin) {
+                            foundInstallment = { count: i, value: monthlyValue };
+                            break;
+                        }
+                    }
+                    if (foundInstallment) {
+                        result.canBuy = true;
+                        result.type = "warning";
+                        result.bestInstallment = foundInstallment;
+                        result.message = `À vista ficaria pesado. A melhor opção é parcelar em ${foundInstallment.count}x para não comprometer sua margem de 20%.`;
+                    } else {
+                        result.message = "Não recomendado. Mesmo parcelando, o valor excede sua capacidade financeira segura.";
+                    }
+                }
+                setPurchaseAnalysis(result);
+            };
+            return (
+                <div className="min-h-screen p-4 md:p-8">
+                    <div className="max-w-6xl mx-auto">
+                        {/* Header */}
+                        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div>
+                                <h1 className="text-3xl font-bold text-indigo-700 flex items-center gap-2">
+                                    <i data-lucide="wallet" className="w-8 h-8 text-indigo-700"></i> Finanças Inteligentes
+                                </h1>
+                                <div className="flex items-center gap-2 mt-1 text-slate-500">
+                                    <i data-lucide="calendar" className="w-4 h-4"></i>
+                                    <input
+                                        type="month"
+                                        value={selectedMonth}
+                                        onChange={(e) => setSelectedMonth(e.target.value)}
+                                        className="bg-transparent font-medium focus:outline-none cursor-pointer hover:text-indigo-600 transition-colors"
+                                    />
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4 w-full md:w-auto">
+                                <div className="bg-indigo-100 p-3 rounded-xl shrink-0">
+                                    <i data-lucide="dollar-sign" className="w-6 h-6 text-indigo-600"></i>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Salário do Mês</p>
+                                    <input
+                                        type="number"
+                                        value={salary || ''}
+                                        onChange={(e) => updateCurrentMonth({ salary: parseFloat(e.target.value) || 0 })}
+                                        placeholder="R$ 0,00"
+                                        className="text-xl font-bold bg-transparent border-b border-dashed border-indigo-200 focus:outline-none focus:border-indigo-500 w-full md:w-32"
+                                    />
+                                </div>
+                            </div>
+                        </header>
+                        {/* Gráfico de Linha */}
+                        <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-8 overflow-hidden">
+                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-slate-700">
+                                <i data-lucide="trending-up" className="w-5 h-5 text-indigo-600"></i> Tendência de Gastos Mensais
+                            </h3>
+                            <div className="relative h-[200px] w-full overflow-x-auto pb-2">
+                                {chartData.length > 1 ? (
+                                    <div className="min-w-[500px] h-full">
+                                        <svg viewBox="0 0 800 200" className="w-full h-full preserve-3d">
+                                            {[0, 0.5, 1].map((p, i) => (
+                                                <line key={i} x1="40" y1={160 - p * 120} x2="760" y2={160 - p * 120} stroke="#f1f5f9" strokeWidth="1" />
+                                            ))}
+                                            <path d={linePath} fill="none" stroke="#4f46e5" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-lg" />
+                                            {chartData.map((d, i) => {
+                                                const x = 40 + (i * 720 / (chartData.length - 1));
+                                                const y = 160 - (d.value / maxExpenseInHistory * 120);
+                                                const isSelected = d.key === selectedMonth;
+                                                return (
+                                                    <g key={i} className="group cursor-pointer">
+                                                        <circle cx={x} cy={y} r={isSelected ? "8" : "5"} fill={isSelected ? "#4f46e5" : "white"} stroke="#4f46e5" strokeWidth="3" className="transition-all duration-300" />
+                                                        <text x={x} y="190" textAnchor="middle" className={`text-[12px] font-bold ${isSelected ? 'fill-indigo-600' : 'fill-slate-400'}`}>{d.label}</text>
+                                                        <g className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <rect x={x - 40} y={y - 35} width="80" height="25" rx="4" fill="#1e293b" />
+                                                            <text x={x} y={y - 18} textAnchor="middle" fill="white" className="text-[10px] font-bold">R$ {d.value.toFixed(0)}</text>
+                                                        </g>
+                                                    </g>
+                                                );
+                                            })}
+                                        </svg>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-slate-400 italic">
+                                        Crie dados em outros meses para visualizar a tendência.
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                        {/* Dashboard Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 transition-transform hover:scale-[1.02]">
+                                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase">Saldo Livre</span>
+                                <h2 className="text-2xl font-bold mt-2">R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            </div>
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 transition-transform hover:scale-[1.02]">
+                                <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full uppercase">Gastos Atuais</span>
+                                <h2 className="text-2xl font-bold mt-2">R$ {totalExpenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            </div>
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 transition-transform hover:scale-[1.02]">
+                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase">Investido</span>
+                                <h2 className="text-2xl font-bold mt-2">R$ {totalInvested.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            </div>
+                        </div>
+                        {/* Analisador Temporal */}
+                        <section className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl mb-8 relative overflow-hidden">
+                            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="bg-indigo-500 p-2 rounded-lg">
+                                            <i data-lucide="shopping-bag" className="w-5 h-5 text-white"></i>
+                                        </div>
+                                        <h3 className="text-2xl font-bold">Analisador Inteligente</h3>
+                                    </div>
+                                    <p className="text-slate-400 mb-6">Calculamos o menor número de parcelas para você sair da dívida o mais rápido possível sem comprometer seu custo de vida.</p>
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <input
+                                            type="number"
+                                            placeholder="Preço do produto"
+                                            value={productPrice}
+                                            onChange={(e) => setProductPrice(e.target.value)}
+                                            className="flex-1 w-full bg-slate-800 border border-slate-700 rounded-2xl px-6 py-4 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                        />
+                                        <button onClick={analyzePurchase} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 w-full sm:w-auto rounded-2xl transition-all">
+                                            Analisar
+                                        </button>
+                                    </div>
+                                </div>
+                                {purchaseAnalysis ? (
+                                    <div className={`p-6 rounded-2xl border-l-8 ${purchaseAnalysis.type === 'success' ? 'bg-green-500/10 border-green-500' :
+                                            purchaseAnalysis.type === 'warning' ? 'bg-amber-500/10 border-amber-500' :
+                                                'bg-red-500/10 border-red-500'
+                                        }`}>
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <i data-lucide="clock" className="w-4 h-4 text-indigo-400"></i>
+                                            <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">Plano Sugerido</span>
+                                        </div>
+                                        <p className="text-lg font-medium mb-4">{purchaseAnalysis.message}</p>
+                                        {purchaseAnalysis.bestInstallment && (
+                                            <div className="bg-black/40 p-4 rounded-xl border border-white/10 mb-4">
+                                                <p className="text-xs text-slate-400 mb-1">Pagamento Ideal:</p>
+                                                <p className="text-2xl font-bold">{purchaseAnalysis.bestInstallment.count}x de R$ {purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-4 text-xs border-t border-white/10 pt-4">
+                                            <div><p className="text-slate-500">Custo p/ fim do mês</p><p className="font-bold text-white">R$ {purchaseAnalysis.details.projected.toLocaleString('pt-BR')}</p></div>
+                                            <div><p className="text-slate-500">Reserva Investimento</p><p className="font-bold text-white">R$ {purchaseAnalysis.details.gap.toLocaleString('pt-BR')}</p></div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="hidden lg:flex items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl h-full p-8 text-slate-600 text-center italic">
+                                        Analisaremos o impacto temporal da sua compra.
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* Listas */}
+                            <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                    <i data-lucide="pie-chart" className="w-5 h-5 text-red-500"></i> Detalhar Gastos
+                                </h3>
+                                <form onSubmit={addExpense} className="flex flex-col sm:flex-row gap-2 mb-6">
+                                    <input type="text" placeholder="Ex: Mercado" value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-red-100 focus:outline-none" />
+                                    <div className="flex gap-2 w-full sm:w-auto">
+                                        <input type="number" placeholder="R$" value={expenseValue} onChange={(e) => setExpenseValue(e.target.value)} className="flex-1 sm:w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-red-100 focus:outline-none" />
+                                        <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-black transition-colors shrink-0 flex items-center justify-center">
+                                            <i data-lucide="plus-circle" className="w-5 h-5"></i>
+                                        </button>
+                                    </div>
+                                </form>
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                                    {expenses.map(e => (
+                                        <div key={e.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl group hover:bg-slate-100 transition-colors">
+                                            <span className="text-slate-700 font-medium">{e.desc}</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-bold text-red-500">- R$ {e.value.toLocaleString('pt-BR')}</span>
+                                                <button onClick={() => removeExpense(e.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                            <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                    <i data-lucide="trending-up" className="w-5 h-5 text-emerald-500"></i> Investimentos
+                                </h3>
+                                <form onSubmit={addInvestment} className="flex flex-col sm:flex-row gap-2 mb-6">
+                                    <input type="text" placeholder="Ex: Tesouro" value={investmentDesc} onChange={(e) => setInvestmentDesc(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-100 focus:outline-none" />
+                                    <div className="flex gap-2 w-full sm:w-auto">
+                                        <input type="number" placeholder="R$ 1000+" value={investmentValue} onChange={(e) => setInvestmentValue(e.target.value)} className="flex-1 sm:w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-100 focus:outline-none" />
+                                        <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-colors shrink-0 flex items-center justify-center">
+                                            <i data-lucide="plus-circle" className="w-5 h-5"></i>
+                                        </button>
+                                    </div>
+                                </form>
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                                    {investments.map(i => (
+                                        <div key={i.id} className="flex justify-between items-center p-3 bg-emerald-50 rounded-xl border border-emerald-100 group">
+                                            <span className="text-emerald-900 font-medium">{i.desc}</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-bold text-emerald-600">+ R$ {i.value.toLocaleString('pt-BR')}</span>
+                                                <button onClick={() => removeInvestment(i.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
