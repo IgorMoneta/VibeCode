@@ -1,484 +1,358 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Wallet, 
-  TrendingUp, 
-  ShoppingBag, 
-  PlusCircle, 
-  Trash2, 
-  AlertCircle, 
-  CheckCircle2, 
-  DollarSign, 
-  PieChart,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Calendar,
-  Clock,
-  Utensils,
-  Car,
-  HeartPulse,
-  Gamepad2,
-  MoreHorizontal,
-  Target,
-  Tv,
-  CreditCard,
-  Plus,
-  Coins,
-  ShieldAlert,
-  Layers,
-  ChevronRight
-} from 'lucide-react';
-
-const App = () => {
-  // Configuração de data e mês (YYYY-MM)
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  const MIN_INVESTMENT_GOAL = 1000;
-  
-  // 1. GASTOS FIXOS
-  const [fixedExpenses, setFixedExpenses] = useState([]);
-
-  // 2. PARCELAMENTOS
-  const [installments, setInstallments] = useState([]);
-
-  const [monthlyData, setMonthlyData] = useState({
-    [selectedMonth]: { salary: 0, expenses: [], investments: [] }
-  });
-
-  const expenseCategories = [
-    { id: 'Alimentação', icon: <Utensils size={16} /> },
-    { id: 'Transporte', icon: <Car size={16} /> },
-    { id: 'Assinaturas', icon: <Tv size={16} /> },
-    { id: 'Parcelas', icon: <CreditCard size={16} /> },
-    { id: 'Lazer', icon: <Gamepad2 size={16} /> },
-    { id: 'Saúde', icon: <HeartPulse size={16} /> },
-    { id: 'Outros', icon: <MoreHorizontal size={16} /> },
-  ];
-
-  // Estados de Formulários
-  const [newFixedDesc, setNewFixedDesc] = useState('');
-  const [newFixedValue, setNewFixedValue] = useState('');
-  const [newInstallDesc, setNewInstallDesc] = useState('');
-  const [newInstallValue, setNewInstallValue] = useState('');
-  const [newInstallMonths, setNewInstallMonths] = useState(1);
-  const [expenseCat, setExpenseCat] = useState('Alimentação');
-  const [expenseDesc, setExpenseDesc] = useState('');
-  const [expenseValue, setExpenseValue] = useState('');
-  const [investValue, setInvestValue] = useState('');
-  const [productPrice, setProductPrice] = useState('');
-  const [purchaseAnalysis, setPurchaseAnalysis] = useState(null);
-
-  const currentMonthData = monthlyData[selectedMonth] || { salary: 0, expenses: [], investments: [] };
-  const salary = currentMonthData.salary || 0;
-  const variableExpenses = currentMonthData.expenses || [];
-  const rawInvestments = currentMonthData.investments || [];
-
-  // Suporte a vírgula para valores brasileiros
-  const parseBrazilianValue = (val) => {
-    if (typeof val === 'string') {
-      // Remove pontos de milhar se houver e troca a vírgula por ponto
-      const cleanVal = val.replace(/\./g, '').replace(',', '.');
-      return parseFloat(cleanVal);
-    }
-    return val;
-  };
-
-  // --- LÓGICA DE FILTRAGEM DE PARCELAS ---
-  const totalInstallments = useMemo(() => {
-    return installments.reduce((acc, curr) => {
-      const [startYear, startMonthNum] = curr.startMonth.split('-').map(Number);
-      const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
-      const startTotalMonths = startYear * 12 + startMonthNum;
-      const selTotalMonths = selYear * 12 + selMonthNum;
-      const diff = selTotalMonths - startTotalMonths;
-
-      if (diff >= 0 && diff < curr.totalMonths) {
-        return acc + curr.value;
-      }
-      return acc;
-    }, 0);
-  }, [installments, selectedMonth]);
-
-  const totalFixed = useMemo(() => fixedExpenses.reduce((acc, curr) => acc + curr.value, 0), [fixedExpenses]);
-  const totalVariable = useMemo(() => variableExpenses.reduce((acc, curr) => acc + curr.value, 0), [variableExpenses]);
-  const totalInvestedGross = useMemo(() => rawInvestments.reduce((acc, curr) => acc + curr.value, 0), [rawInvestments]);
-
-  const totalCommitted = totalFixed + totalInstallments + totalVariable;
-
-  // LÓGICA DE SALDO (Zera a carteira e tira do investimento se passar do salário)
-  const rawBalance = salary - totalCommitted - totalInvestedGross;
-  const amountTakenFromInvestment = rawBalance < 0 ? Math.abs(rawBalance) : 0;
-  const displayBalance = Math.max(0, rawBalance);
-  const totalInvestedNet = Math.max(0, totalInvestedGross - amountTakenFromInvestment);
-
-  const isHealthCompromised = amountTakenFromInvestment > 0 || totalInvestedNet < MIN_INVESTMENT_GOAL;
-
-  // --- LÓGICA DO GRÁFICO ---
-  const chartData = useMemo(() => {
-    return Object.keys(monthlyData)
-      .sort()
-      .map(month => {
-        const data = monthlyData[month];
-        const vExp = data.expenses ? data.expenses.reduce((acc, curr) => acc + curr.value, 0) : 0;
-        
-        const instForMonth = installments.reduce((acc, curr) => {
-          const [sY, sM] = curr.startMonth.split('-').map(Number);
-          const [mY, mM] = month.split('-').map(Number);
-          const diff = (mY * 12 + mM) - (sY * 12 + sM);
-          return (diff >= 0 && diff < curr.totalMonths) ? acc + curr.value : acc;
-        }, 0);
-
-        const totalExp = totalFixed + instForMonth + vExp;
-        const [year, monthNum] = month.split('-');
-        const monthLabel = new Date(year, parseInt(monthNum) - 1).toLocaleString('pt-BR', { month: 'short' });
-        return { label: `${monthLabel}/${year.slice(2)}`, value: totalExp, key: month };
-      });
-  }, [monthlyData, totalFixed, installments]);
-
-  const maxExpenseInHistory = Math.max(...chartData.map(d => d.value), 100);
-
-  const linePath = useMemo(() => {
-    if (chartData.length < 2) return "";
-    const width = 800;
-    const height = 150;
-    const padding = 40;
-    const points = chartData.map((d, i) => {
-      const x = padding + (i * (width - 2 * padding) / (chartData.length - 1));
-      const y = height - padding - (d.value / maxExpenseInHistory * (height - 2 * padding));
-      return `${x},${y}`;
-    });
-    return `M ${points.join(' L ')}`;
-  }, [chartData, maxExpenseInHistory]);
-
-  const updateCurrentMonth = (updates) => {
-    setMonthlyData(prev => ({
-      ...prev,
-      [selectedMonth]: { ...currentMonthData, ...updates }
-    }));
-  };
-
-  // Funções de Adição
-  const addFixed = (e) => {
-    e.preventDefault();
-    const val = parseBrazilianValue(newFixedValue);
-    if (!newFixedDesc || isNaN(val)) return;
-    setFixedExpenses([...fixedExpenses, { id: Date.now(), desc: newFixedDesc, value: val, category: 'Assinaturas' }]);
-    setNewFixedDesc(''); setNewFixedValue('');
-  };
-
-  const addInstallment = (e) => {
-    e.preventDefault();
-    const val = parseBrazilianValue(newInstallValue);
-    if (!newInstallDesc || isNaN(val)) return;
-    setInstallments([...installments, { 
-      id: Date.now(), 
-      desc: newInstallDesc, 
-      value: val, 
-      category: 'Parcelas', 
-      totalMonths: parseInt(newInstallMonths), 
-      startMonth: selectedMonth 
-    }]);
-    setNewInstallDesc(''); setNewInstallValue(''); setNewInstallMonths(1);
-  };
-
-  const addVariable = (e) => {
-    e.preventDefault();
-    const val = parseBrazilianValue(expenseValue);
-    if (isNaN(val)) return;
-    updateCurrentMonth({ expenses: [...variableExpenses, { id: Date.now(), category: expenseCat, desc: expenseCat === 'Outros' ? expenseDesc : expenseCat, value: val }] });
-    setExpenseValue(''); setExpenseDesc('');
-  };
-
-  const addInvestment = (e) => {
-    e.preventDefault();
-    const val = parseBrazilianValue(investValue);
-    if (isNaN(val)) return;
-    updateCurrentMonth({ investments: [...rawInvestments, { id: Date.now(), category: 'Reserva', desc: 'Aporte Mensal', value: val }] });
-    setInvestValue('');
-  };
-
-  const removeFixed = (id) => setFixedExpenses(fixedExpenses.filter(e => e.id !== id));
-  const removeInstallment = (id) => setInstallments(installments.filter(e => e.id !== id));
-  const removeVariable = (id) => updateCurrentMonth({ expenses: variableExpenses.filter(e => e.id !== id) });
-  const removeInvest = (id) => updateCurrentMonth({ investments: rawInvestments.filter(i => i.id !== id) });
-
-  const analyzePurchase = () => {
-    const price = parseBrazilianValue(productPrice);
-    if (isNaN(price) || price <= 0 || salary <= 0) return;
-
-    let result = { 
-      canBuy: false, message: "", type: "error", bestInstallment: null, blockAtSight: isHealthCompromised 
-    };
-
-    if (isHealthCompromised) {
-      const monthlySafe = salary * 0.10;
-      let found = null;
-      for (let i = 2; i <= 12; i++) {
-        if (price / i <= monthlySafe) { found = { count: i, value: price / i }; break; }
-      }
-      if (found) {
-        result = { canBuy: true, type: "warning", blockAtSight: true, bestInstallment: found, 
-          message: "Saldo comprometido. PAGAMENTO À VISTA BLOQUEADO. Sugerimos parcelar para não zerar sua reserva líquida." };
-      } else {
-        result.message = "Impossível comprar agora. Sua reserva está sendo consumida para pagar gastos básicos.";
-      }
-    } else {
-      if (price <= displayBalance * 0.5) {
-        result = { canBuy: true, type: "success", bestInstallment: { count: 1, value: price }, 
-          message: "Compra segura à vista. Seus investimentos e parcelas estão protegidos." };
-      } else {
-        result = { canBuy: true, type: "warning", bestInstallment: { count: 3, value: price / 3 }, 
-          message: "Valor relevante. Recomendamos parcelar para não comprometer o fôlego diário." };
-      }
-    }
-    setPurchaseAnalysis(result);
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Header */}
-        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <h1 className="text-3xl font-black text-indigo-700 flex items-center gap-2">
-              <Wallet className="w-8 h-8" strokeWidth={3} /> Finanças Inteligentes
-            </h1>
-            <div className="flex items-center gap-2 mt-2 text-slate-500 font-bold bg-white w-fit px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
-              <Calendar size={18} className="text-indigo-500" />
-              <input 
-                type="month" 
-                value={selectedMonth}
-                onChange={(e) => {
-                  const m = e.target.value;
-                  setSelectedMonth(m);
-                  if (!monthlyData[m]) {
-                    setMonthlyData(prev => ({ ...prev, [m]: { salary: 0, expenses: [], investments: [] } }));
-                  }
-                  setPurchaseAnalysis(null);
-                }}
-                className="bg-transparent focus:outline-none uppercase text-xs font-black tracking-widest cursor-pointer"
-              />
-            </div>
-          </div>
-          
-          <div className="bg-white px-6 py-4 rounded-[2rem] shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-indigo-100"><DollarSign size={20}/></div>
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salário Disponível</p>
-              <input 
-                type="text" 
-                value={salary || ''} 
-                onChange={(e) => updateCurrentMonth({ salary: parseBrazilianValue(e.target.value) || 0 })}
-                className="text-xl font-black bg-transparent focus:outline-none w-32 border-b-2 border-dashed border-slate-100 focus:border-indigo-500"
-                placeholder="0,00"
-              />
-            </div>
-          </div>
-        </header>
-
-        {/* Gráfico */}
-        <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 mb-8 overflow-hidden">
-          <h3 className="text-lg font-black mb-8 flex items-center gap-2 text-slate-700">
-            <TrendingUp className="text-indigo-600" size={20} /> Tendência de Gastos
-          </h3>
-          <div className="relative h-[180px] w-full">
-            {chartData.length > 1 ? (
-              <svg viewBox="0 0 800 200" className="w-full h-full" preserveAspectRatio="none">
-                <path d={linePath} fill="none" stroke="#4f46e5" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-xl" />
-                {chartData.map((d, i) => {
-                  const x = 40 + (i * 720 / (chartData.length - 1));
-                  const y = 160 - (d.value / maxExpenseInHistory * 120);
-                  const isCur = d.key === selectedMonth;
-                  return (
-                    <g key={i} className="cursor-pointer group">
-                      <circle cx={x} cy={y} r={isCur ? 8 : 5} fill={isCur ? "#4f46e5" : "white"} stroke="#4f46e5" strokeWidth="4" />
-                      <text x={x} y="195" textAnchor="middle" className={`text-[12px] font-black ${isCur ? 'fill-indigo-600' : 'fill-slate-400'}`}>{d.label}</text>
-                    </g>
-                  );
-                })}
-              </svg>
-            ) : <div className="flex h-full items-center justify-center text-slate-300 italic font-medium">Cadastre dados em outros meses para visualizar o histórico.</div>}
-          </div>
-        </section>
-
-        {/* Dash Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${displayBalance > 0 ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-slate-200 text-slate-500 shadow-none'}`}>
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-[10px] font-black bg-white/20 px-3 py-1 rounded-full uppercase">Saldo Disponível</span>
-              <ArrowUpCircle size={24} className="opacity-40" />
-            </div>
-            <h2 className="text-3xl font-black">R$ {displayBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-          </div>
-          
-          <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between">
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase tracking-widest">Comprometido</span>
-              <ArrowDownCircle size={24} className="text-rose-200" />
-            </div>
-            <h2 className="text-3xl font-black">R$ {totalCommitted.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-          </div>
-
-          <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${amountTakenFromInvestment > 0 ? 'bg-amber-500 text-white shadow-amber-100' : 'bg-indigo-900 text-white shadow-indigo-100'}`}>
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">Reserva Líquida</span>
-              {amountTakenFromInvestment > 0 ? <ShieldAlert size={24} /> : <TrendingUp size={24} />}
-            </div>
-            <h2 className="text-3xl font-black">R$ {totalInvestedNet.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-          </div>
-        </div>
-
-        {/* Gestão de Parcelas e Fixos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <section className="bg-white p-8 rounded-[2.5rem] border-2 border-indigo-50 shadow-sm">
-            <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
-              <Layers className="text-indigo-500" /> Parcelas Ativas
-            </h3>
-            <form onSubmit={addInstallment} className="flex flex-col gap-3 mb-6 bg-slate-50 p-6 rounded-3xl border border-dashed border-slate-200">
-              <div className="flex gap-2">
-                <input type="text" placeholder="O que parcelou?" value={newInstallDesc} onChange={(e) => setNewInstallDesc(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm outline-none" />
-                <input type="text" placeholder="R$ Valor" value={newInstallValue} onChange={(e) => setNewInstallValue(e.target.value)} className="w-28 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold outline-none" />
-              </div>
-              <div className="flex gap-3">
-                <input type="number" placeholder="Quantidade" value={newInstallMonths} onChange={(e) => setNewInstallMonths(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm" />
-                <button type="submit" className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all flex items-center gap-2">
-                  <Plus size={18}/> Salvar
-                </button>
-              </div>
-            </form>
-            <div className="space-y-3">
-              {installments.length === 0 && <p className="text-center text-slate-300 py-4 italic text-sm">Nenhuma parcela cadastrada.</p>}
-              {installments.map(inst => {
-                const [sY, sM] = inst.startMonth.split('-').map(Number);
-                const [selY, selM] = selectedMonth.split('-').map(Number);
-                const diff = (selY * 12 + selM) - (sY * 12 + sM);
-                const isActive = diff >= 0 && diff < inst.totalMonths;
-                return (
-                  <div key={inst.id} className={`flex justify-between items-center p-4 rounded-2xl border transition-all ${isActive ? 'bg-slate-50 border-slate-100 group' : 'bg-slate-50/30 border-transparent grayscale opacity-50'}`}>
-                    <div>
-                      <p className="font-black text-slate-700 text-sm">{inst.desc}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{isActive ? `Parcela ${diff + 1} de ${inst.totalMonths}` : 'Fora da vigência'}</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="font-black text-slate-800">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                      <button onClick={() => removeInstallment(inst.id)} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <div className="space-y-8">
-            <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
-                <Tv className="text-indigo-500" /> Gastos Fixos (Assinaturas)
-              </h3>
-              <form onSubmit={addFixed} className="flex gap-2 mb-6">
-                <input type="text" placeholder="Ex: Netflix" value={newFixedDesc} onChange={(e) => setNewFixedDesc(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none" />
-                <input type="text" placeholder="R$" value={newFixedValue} onChange={(e) => setNewFixedValue(e.target.value)} className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-black" />
-                <button type="submit" className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 transition-all"><Plus/></button>
-              </form>
-              <div className="grid grid-cols-2 gap-3">
-                {fixedExpenses.map(fixed => (
-                  <div key={fixed.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group">
-                    <span className="text-[10px] font-black text-slate-600 uppercase truncate pr-2">{fixed.desc}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-slate-800">R$ {fixed.value.toFixed(2)}</span>
-                      <button onClick={() => removeFixed(fixed.id)} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={12}/></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-              <div className="relative z-10">
-                <h3 className="text-2xl font-black mb-4 flex items-center gap-3 text-indigo-100"><ShoppingBag className="text-indigo-400" /> Simulador de Compras</h3>
-                <div className="flex gap-3 mb-6">
-                  <input type="text" placeholder="Preço do produto" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-white font-black text-xl outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={analyzePurchase} className="bg-indigo-600 hover:bg-indigo-500 px-8 py-4 rounded-2xl font-black transition-all shadow-xl shadow-indigo-600/20">Analisar</button>
-                </div>
-                {purchaseAnalysis && (
-                  <div className={`p-6 rounded-3xl border-l-8 transition-all ${purchaseAnalysis.type === 'success' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-rose-500/10 border-rose-500'}`}>
-                    <div className="flex items-center gap-2 mb-2 font-black uppercase text-[10px] tracking-widest">
-                      {purchaseAnalysis.blockAtSight ? <ShieldAlert size={16} className="text-rose-400" /> : <CheckCircle2 size={16} className="text-emerald-400" />}
-                      {purchaseAnalysis.blockAtSight ? "À Vista Negado" : "Analise Ok"}
-                    </div>
-                    <p className="text-sm font-bold mb-4 leading-tight">{purchaseAnalysis.message}</p>
-                    {purchaseAnalysis.bestInstallment && (
-                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5">
-                        <p className="text-3xl font-black">
-                          {purchaseAnalysis.bestInstallment.count === 1 ? `Total: R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : `${purchaseAnalysis.bestInstallment.count}x de R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
-
-        {/* Rodapé Variáveis e Investimentos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-          <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-            <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><PieChart className="text-rose-500" /> Gastos Variáveis</h3>
-            <form onSubmit={addVariable} className="space-y-4 mb-8">
-              <div className="flex gap-3">
-                <select value={expenseCat} onChange={(e) => setExpenseCat(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-slate-600 outline-none">
-                  {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.id}</option>)}
-                </select>
-                <input type="text" placeholder="R$ Valor" value={expenseValue} onChange={(e) => setExpenseValue(e.target.value)} className="w-32 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-rose-600 outline-none" />
-              </div>
-              <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-black transition-all">Registrar Gasto</button>
-            </form>
-            <div className="space-y-2">
-              {variableExpenses.map(e => (
-                <div key={e.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl group border border-transparent hover:border-slate-200 transition-all">
-                   <div className="flex items-center gap-3">
-                     <span className="text-slate-400">{expenseCategories.find(c => c.id === e.category)?.icon}</span>
-                     <span className="font-black text-slate-700 text-sm">{e.desc}</span>
-                   </div>
-                   <div className="flex items-center gap-3">
-                     <span className="font-black text-rose-500 text-sm">R$ {e.value.toFixed(2)}</span>
-                     <button onClick={() => removeVariable(e.id)} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
-                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-            <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Coins className="text-emerald-500" /> Reserva Mensal</h3>
-            <div className="mb-6 bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 text-[11px] font-bold text-emerald-800 flex items-center gap-3 italic">
-              <Target size={20} className="text-emerald-500"/> Meta: R$ {MIN_INVESTMENT_GOAL.toLocaleString('pt-BR')} (Resgate automático se faltar saldo)
-            </div>
-            <form onSubmit={addInvestment} className="flex gap-3 mb-8">
-              <input type="text" placeholder="Valor para Investir" value={investValue} onChange={(e) => setInvestValue(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-emerald-600 outline-none" />
-              <button type="submit" className="bg-emerald-600 text-white px-8 rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">Aportar</button>
-            </form>
-            <div className="space-y-2">
-              {rawInvestments.map(i => (
-                <div key={i.id} className="flex justify-between items-center p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 group">
-                  <span className="font-black text-emerald-900 text-sm italic">Investimento</span>
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-emerald-600 text-sm">R$ {i.value.toFixed(2)}</span>
-                    <button onClick={() => removeInvest(i.id)} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      </div>
-      
-      <style>{`
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças Inteligentes</title>
+    <!-- Bibliotecas Necessárias -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
-    </div>
-  );
-};
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
 
-export default App;
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        // Helper para ícones Lucide no React (CDN)
+        const Icon = ({ name, size = 20, className = "", strokeWidth = 2 }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className} stroke-width={strokeWidth}></i>;
+        };
+
+        const App = () => {
+            const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+            const MIN_INVESTMENT_GOAL = 1000;
+            
+            const [fixedExpenses, setFixedExpenses] = useState([]);
+            const [installments, setInstallments] = useState([]);
+            const [monthlyData, setMonthlyData] = useState({
+                [selectedMonth]: { salary: 0, expenses: [], investments: [] }
+            });
+
+            const expenseCategories = [
+                { id: 'Alimentação', icon: 'utensils' },
+                { id: 'Transporte', icon: 'car' },
+                { id: 'Assinaturas', icon: 'tv' },
+                { id: 'Parcelas', icon: 'credit-card' },
+                { id: 'Lazer', icon: 'gamepad-2' },
+                { id: 'Saúde', icon: 'heart-pulse' },
+                { id: 'Outros', icon: 'more-horizontal' },
+            ];
+
+            const [newFixedDesc, setNewFixedDesc] = useState('');
+            const [newFixedValue, setNewFixedValue] = useState('');
+            const [newInstallDesc, setNewInstallDesc] = useState('');
+            const [newInstallValue, setNewInstallValue] = useState('');
+            const [newInstallMonths, setNewInstallMonths] = useState(1);
+            const [expenseCat, setExpenseCat] = useState('Alimentação');
+            const [expenseDesc, setExpenseDesc] = useState('');
+            const [expenseValue, setExpenseValue] = useState('');
+            const [investValue, setInvestValue] = useState('');
+            const [productPrice, setProductPrice] = useState('');
+            const [purchaseAnalysis, setPurchaseAnalysis] = useState(null);
+
+            const currentMonthData = monthlyData[selectedMonth] || { salary: 0, expenses: [], investments: [] };
+            const salary = currentMonthData.salary || 0;
+            const variableExpenses = currentMonthData.expenses || [];
+            const rawInvestments = currentMonthData.investments || [];
+
+            const parseBrazilianValue = (val) => {
+                if (typeof val === 'string') {
+                    const cleanVal = val.replace(/\./g, '').replace(',', '.');
+                    return parseFloat(cleanVal);
+                }
+                return val;
+            };
+
+            const totalInstallments = useMemo(() => {
+                return installments.reduce((acc, curr) => {
+                    const [sY, sM] = curr.startMonth.split('-').map(Number);
+                    const [selY, selM] = selectedMonth.split('-').map(Number);
+                    const diff = (selY * 12 + selM) - (sY * 12 + sM);
+                    return (diff >= 0 && diff < curr.totalMonths) ? acc + curr.value : acc;
+                }, 0);
+            }, [installments, selectedMonth]);
+
+            const totalFixed = useMemo(() => fixedExpenses.reduce((acc, curr) => acc + curr.value, 0), [fixedExpenses]);
+            const totalVariable = useMemo(() => variableExpenses.reduce((acc, curr) => acc + curr.value, 0), [variableExpenses]);
+            const totalInvestedGross = useMemo(() => rawInvestments.reduce((acc, curr) => acc + curr.value, 0), [rawInvestments]);
+
+            const totalCommitted = totalFixed + totalInstallments + totalVariable;
+
+            const rawBalance = salary - totalCommitted - totalInvestedGross;
+            const amountTakenFromInvestment = rawBalance < 0 ? Math.abs(rawBalance) : 0;
+            const displayBalance = Math.max(0, rawBalance);
+            const totalInvestedNet = Math.max(0, totalInvestedGross - amountTakenFromInvestment);
+
+            const isHealthCompromised = amountTakenFromInvestment > 0 || totalInvestedNet < MIN_INVESTMENT_GOAL;
+
+            const chartData = useMemo(() => {
+                return Object.keys(monthlyData).sort().map(month => {
+                    const data = monthlyData[month];
+                    const vExp = data.expenses ? data.expenses.reduce((acc, curr) => acc + curr.value, 0) : 0;
+                    const instForMonth = installments.reduce((acc, curr) => {
+                        const [sY, sM] = curr.startMonth.split('-').map(Number);
+                        const [mY, mM] = month.split('-').map(Number);
+                        const diff = (mY * 12 + mM) - (sY * 12 + sM);
+                        return (diff >= 0 && diff < curr.totalMonths) ? acc + curr.value : acc;
+                    }, 0);
+                    return { label: month, value: totalFixed + instForMonth + vExp, key: month };
+                });
+            }, [monthlyData, totalFixed, installments]);
+
+            const maxExpenseInHistory = Math.max(...chartData.map(d => d.value), 100);
+
+            const linePath = useMemo(() => {
+                if (chartData.length < 2) return "";
+                const width = 800;
+                const points = chartData.map((d, i) => {
+                    const x = 40 + (i * 720 / (chartData.length - 1));
+                    const y = 160 - (d.value / maxExpenseInHistory * 120);
+                    return `${x},${y}`;
+                });
+                return `M ${points.join(' L ')}`;
+            }, [chartData, maxExpenseInHistory]);
+
+            const updateCurrentMonth = (updates) => {
+                setMonthlyData(prev => ({ ...prev, [selectedMonth]: { ...currentMonthData, ...updates } }));
+            };
+
+            const addFixed = (e) => {
+                e.preventDefault();
+                const val = parseBrazilianValue(newFixedValue);
+                if (!newFixedDesc || isNaN(val)) return;
+                setFixedExpenses([...fixedExpenses, { id: Date.now(), desc: newFixedDesc, value: val, category: 'Assinaturas' }]);
+                setNewFixedDesc(''); setNewFixedValue('');
+            };
+
+            const addInstallment = (e) => {
+                e.preventDefault();
+                const val = parseBrazilianValue(newInstallValue);
+                if (!newInstallDesc || isNaN(val)) return;
+                setInstallments([...installments, { id: Date.now(), desc: newInstallDesc, value: val, category: 'Parcelas', totalMonths: parseInt(newInstallMonths), startMonth: selectedMonth }]);
+                setNewInstallDesc(''); setNewInstallValue(''); setNewInstallMonths(1);
+            };
+
+            const addVariable = (e) => {
+                e.preventDefault();
+                const val = parseBrazilianValue(expenseValue);
+                if (isNaN(val)) return;
+                updateCurrentMonth({ expenses: [...variableExpenses, { id: Date.now(), category: expenseCat, desc: expenseCat === 'Outros' ? expenseDesc : expenseCat, value: val }] });
+                setExpenseValue(''); setExpenseDesc('');
+            };
+
+            const addInvestment = (e) => {
+                e.preventDefault();
+                const val = parseBrazilianValue(investValue);
+                if (isNaN(val)) return;
+                updateCurrentMonth({ investments: [...rawInvestments, { id: Date.now(), category: 'Reserva', desc: 'Aporte Mensal', value: val }] });
+                setInvestValue('');
+            };
+
+            const analyzePurchase = () => {
+                const price = parseBrazilianValue(productPrice);
+                if (isNaN(price) || price <= 0 || salary <= 0) return;
+                let result = { canBuy: false, message: "", type: "error", bestInstallment: null, blockAtSight: isHealthCompromised };
+                if (isHealthCompromised) {
+                    const monthlySafe = salary * 0.10;
+                    let found = null;
+                    for (let i = 2; i <= 12; i++) {
+                        if (price / i <= monthlySafe) { found = { count: i, value: price / i }; break; }
+                    }
+                    if (found) { result = { ...result, canBuy: true, type: "warning", bestInstallment: found, message: "Saldo comprometido. PAGAMENTO À VISTA BLOQUEADO. Sugerimos parcelar." }; }
+                    else { result.message = "Impossível comprar agora. Sua reserva está sendo consumida."; }
+                } else {
+                    if (price <= displayBalance * 0.5) { result = { canBuy: true, type: "success", bestInstallment: { count: 1, value: price }, message: "Compra segura à vista." }; }
+                    else { result = { canBuy: true, type: "warning", bestInstallment: { count: 3, value: price / 3 }, message: "Valor alto. Recomendamos parcelar." }; }
+                }
+                setPurchaseAnalysis(result);
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8">
+                    <div className="max-w-6xl mx-auto">
+                        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div>
+                                <h1 className="text-3xl font-black text-indigo-700 flex items-center gap-2">
+                                    <Icon name="wallet" size={32} /> Finanças Inteligentes
+                                </h1>
+                                <div className="flex items-center gap-2 mt-2 text-slate-500 font-bold bg-white w-fit px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
+                                    <Icon name="calendar" size={18} className="text-indigo-500" />
+                                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent focus:outline-none uppercase text-xs font-black cursor-pointer" />
+                                </div>
+                            </div>
+                            <div className="bg-white px-6 py-4 rounded-[2rem] shadow-sm border border-slate-200 flex items-center gap-4">
+                                <div className="bg-indigo-600 p-3 rounded-2xl text-white"><Icon name="dollar-sign" /></div>
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salário Disponível</p>
+                                    <input type="text" value={salary || ''} onChange={(e) => updateCurrentMonth({ salary: parseBrazilianValue(e.target.value) || 0 })} className="text-xl font-black bg-transparent focus:outline-none w-32 border-b-2 border-dashed border-slate-100 focus:border-indigo-500" placeholder="0,00" />
+                                </div>
+                            </div>
+                        </header>
+
+                        <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 mb-8 overflow-hidden">
+                            <h3 className="text-lg font-black mb-8 flex items-center gap-2 text-slate-700"><Icon name="trending-up" className="text-indigo-600" /> Tendência de Gastos</h3>
+                            <div className="relative h-[180px] w-full">
+                                {chartData.length > 1 ? (
+                                    <svg viewBox="0 0 800 200" className="w-full h-full" preserveAspectRatio="none">
+                                        <path d={linePath} fill="none" stroke="#4f46e5" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+                                        {chartData.map((d, i) => (
+                                            <circle key={i} cx={40 + (i * 720 / (chartData.length - 1))} cy={160 - (d.value / maxExpenseInHistory * 120)} r={d.key === selectedMonth ? 8 : 5} fill={d.key === selectedMonth ? "#4f46e5" : "white"} stroke="#4f46e5" strokeWidth="4" />
+                                        ))}
+                                    </svg>
+                                ) : <div className="flex h-full items-center justify-center text-slate-300 italic font-medium text-sm">Navegue pelos meses para ver a evolução.</div>}
+                            </div>
+                        </section>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${displayBalance > 0 ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-slate-200 text-slate-500'}`}>
+                                <span className="text-[10px] font-black bg-white/20 px-3 py-1 rounded-full uppercase w-fit">Saldo Livre</span>
+                                <h2 className="text-3xl font-black mt-4">R$ {displayBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            </div>
+                            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between">
+                                <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase w-fit">Comprometido</span>
+                                <h2 className="text-3xl font-black mt-4 text-slate-800">R$ {totalCommitted.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            </div>
+                            <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${amountTakenFromInvestment > 0 ? 'bg-amber-500 text-white shadow-amber-100' : 'bg-indigo-900 text-white'}`}>
+                                <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase w-fit">Reserva Líquida</span>
+                                <h2 className="text-3xl font-black mt-4">R$ {totalInvestedNet.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+                            <section className="bg-white p-8 rounded-[2.5rem] border-2 border-indigo-50 shadow-sm">
+                                <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><Icon name="layers" className="text-indigo-500" /> Parcelas Ativas</h3>
+                                <form onSubmit={addInstallment} className="flex flex-col gap-3 mb-6 bg-slate-50 p-6 rounded-3xl border border-dashed border-slate-200">
+                                    <div className="flex gap-2">
+                                        <input type="text" placeholder="O que parcelou?" value={newInstallDesc} onChange={(e) => setNewInstallDesc(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm outline-none" />
+                                        <input type="text" placeholder="R$ Valor" value={newInstallValue} onChange={(e) => setNewInstallValue(e.target.value)} className="w-28 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold outline-none" />
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <input type="number" placeholder="Quantidade" value={newInstallMonths} onChange={(e) => setNewInstallMonths(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm" />
+                                        <button type="submit" className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all flex items-center gap-2"><Icon name="plus" size={18}/> Salvar</button>
+                                    </div>
+                                </form>
+                                <div className="space-y-3">
+                                    {installments.map(inst => {
+                                        const [sY, sM] = inst.startMonth.split('-').map(Number);
+                                        const [selY, selM] = selectedMonth.split('-').map(Number);
+                                        const diff = (selY * 12 + selM) - (sY * 12 + sM);
+                                        const isActive = diff >= 0 && diff < inst.totalMonths;
+                                        return (
+                                            <div key={inst.id} className={`flex justify-between items-center p-4 rounded-2xl border transition-all ${isActive ? 'bg-slate-50 border-slate-100' : 'opacity-40 grayscale'}`}>
+                                                <div><p className="font-black text-slate-700 text-sm">{inst.desc}</p><p className="text-[10px] text-slate-400 font-bold">{isActive ? `Parcela ${diff + 1} de ${inst.totalMonths}` : 'Fora da vigência'}</p></div>
+                                                <div className="flex items-center gap-4"><span className="font-black">R$ {inst.value.toFixed(2)}</span><button onClick={() => removeInstallment(inst.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={16}/></button></div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+
+                            <div className="space-y-8">
+                                <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><Icon name="tv" className="text-indigo-500" /> Gastos Fixos</h3>
+                                    <form onSubmit={addFixed} className="flex gap-2 mb-6">
+                                        <input type="text" placeholder="Ex: Netflix" value={newFixedDesc} onChange={(e) => setNewFixedDesc(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none" />
+                                        <input type="text" placeholder="R$" value={newFixedValue} onChange={(e) => setNewFixedValue(e.target.value)} className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-black" />
+                                        <button type="submit" className="bg-indigo-600 text-white p-2 rounded-xl"><Icon name="plus" /></button>
+                                    </form>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {fixedExpenses.map(fixed => (
+                                            <div key={fixed.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group">
+                                                <span className="text-[10px] font-black uppercase truncate pr-2">{fixed.desc}</span>
+                                                <div className="flex items-center gap-2"><span className="text-xs font-black">R$ {fixed.value.toFixed(2)}</span><button onClick={() => removeFixed(fixed.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={12}/></button></div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                <section className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+                                    <h3 className="text-2xl font-black mb-4 flex items-center gap-3 text-indigo-100"><Icon name="shopping-bag" className="text-indigo-400" /> Simulador</h3>
+                                    <div className="flex gap-3 mb-6">
+                                        <input type="text" placeholder="Valor do produto" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-white font-black outline-none focus:ring-2 focus:ring-indigo-500" />
+                                        <button onClick={analyzePurchase} className="bg-indigo-600 hover:bg-indigo-500 px-8 py-4 rounded-2xl font-black transition-all">Analisar</button>
+                                    </div>
+                                    {purchaseAnalysis && (
+                                        <div className={`p-6 rounded-3xl border-l-8 transition-all ${purchaseAnalysis.type === 'success' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-rose-500/10 border-rose-500'}`}>
+                                            <div className="flex items-center gap-2 mb-2 font-black uppercase text-[10px]">
+                                                <Icon name={purchaseAnalysis.blockAtSight ? "shield-alert" : "check-circle-2"} size={16} className={purchaseAnalysis.blockAtSight ? "text-rose-400" : "text-emerald-400"} />
+                                                {purchaseAnalysis.blockAtSight ? "À Vista Bloqueado" : "Analise Ok"}
+                                            </div>
+                                            <p className="text-sm font-bold mb-4">{purchaseAnalysis.message}</p>
+                                            {purchaseAnalysis.bestInstallment && (
+                                                <div className="bg-black/40 p-5 rounded-2xl border border-white/5 font-black text-2xl">
+                                                    {purchaseAnalysis.bestInstallment.count === 1 ? `Total: R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : `${purchaseAnalysis.bestInstallment.count}x de R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </section>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+                            <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Icon name="pie-chart" className="text-rose-500" /> Gastos Variáveis</h3>
+                                <form onSubmit={addVariable} className="space-y-4 mb-8">
+                                    <div className="flex gap-3">
+                                        <select value={expenseCat} onChange={(e) => setExpenseCat(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black outline-none">
+                                            {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.id}</option>)}
+                                        </select>
+                                        <input type="text" placeholder="R$ Valor" value={expenseValue} onChange={(e) => setExpenseValue(e.target.value)} className="w-32 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-rose-600 outline-none" />
+                                    </div>
+                                    <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black">Registrar Gasto</button>
+                                </form>
+                                <div className="space-y-2">
+                                    {variableExpenses.map(e => (
+                                        <div key={e.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-200">
+                                            <span className="font-black text-slate-700 text-sm">{e.desc}</span>
+                                            <div className="flex items-center gap-3"><span className="font-black text-rose-500 text-sm">R$ {e.value.toFixed(2)}</span><button onClick={() => removeVariable(e.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={16}/></button></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                                <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Icon name="coins" className="text-emerald-500" /> Reserva Mensal</h3>
+                                <div className="mb-6 bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 text-[11px] font-bold text-emerald-800 flex items-center gap-3 italic">
+                                    <Icon name="target" size={20} className="text-emerald-500"/> Meta: R$ {MIN_INVESTMENT_GOAL.toLocaleString('pt-BR')} (Auto-resgate ativo)
+                                </div>
+                                <form onSubmit={addInvestment} className="flex gap-3 mb-8">
+                                    <input type="text" placeholder="Valor para Investir" value={investValue} onChange={(e) => setInvestValue(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-emerald-600 outline-none" />
+                                    <button type="submit" className="bg-emerald-600 text-white px-8 rounded-2xl font-black shadow-lg shadow-emerald-100">Aportar</button>
+                                </form>
+                                <div className="space-y-2">
+                                    {rawInvestments.map(i => (
+                                        <div key={i.id} className="flex justify-between items-center p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                                            <span className="font-black text-emerald-900 text-sm italic">Investimento</span>
+                                            <div className="flex items-center gap-3"><span className="font-black text-emerald-600 text-sm">R$ {i.value.toFixed(2)}</span><button onClick={() => removeInvest(i.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={16}/></button></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
