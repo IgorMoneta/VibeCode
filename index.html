@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import {   Wallet, 
+import { 
+  Wallet, 
   TrendingUp, 
   ShoppingBag, 
   PlusCircle, 
@@ -32,10 +33,10 @@ const App = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const MIN_INVESTMENT_GOAL = 1000;
   
-  // 1. GASTOS FIXOS (Lista iniciada vazia a pedido do usuário)
+  // 1. GASTOS FIXOS
   const [fixedExpenses, setFixedExpenses] = useState([]);
 
-  // 2. PARCELAMENTOS (Lista iniciada vazia a pedido do usuário)
+  // 2. PARCELAMENTOS
   const [installments, setInstallments] = useState([]);
 
   const [monthlyData, setMonthlyData] = useState({
@@ -70,12 +71,21 @@ const App = () => {
   const variableExpenses = currentMonthData.expenses || [];
   const rawInvestments = currentMonthData.investments || [];
 
+  // Suporte a vírgula para valores brasileiros
+  const parseBrazilianValue = (val) => {
+    if (typeof val === 'string') {
+      // Remove pontos de milhar se houver e troca a vírgula por ponto
+      const cleanVal = val.replace(/\./g, '').replace(',', '.');
+      return parseFloat(cleanVal);
+    }
+    return val;
+  };
+
   // --- LÓGICA DE FILTRAGEM DE PARCELAS ---
   const totalInstallments = useMemo(() => {
     return installments.reduce((acc, curr) => {
       const [startYear, startMonthNum] = curr.startMonth.split('-').map(Number);
       const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
-
       const startTotalMonths = startYear * 12 + startMonthNum;
       const selTotalMonths = selYear * 12 + selMonthNum;
       const diff = selTotalMonths - startTotalMonths;
@@ -145,14 +155,7 @@ const App = () => {
     }));
   };
 
-  // Suporte a vírgula para valores brasileiros
-  const parseBrazilianValue = (val) => {
-    if (typeof val === 'string') {
-      return parseFloat(val.replace(',', '.'));
-    }
-    return val;
-  };
-
+  // Funções de Adição
   const addFixed = (e) => {
     e.preventDefault();
     const val = parseBrazilianValue(newFixedValue);
@@ -312,12 +315,12 @@ const App = () => {
               <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase tracking-widest">Comprometido</span>
               <ArrowDownCircle size={24} className="text-rose-200" />
             </div>
-            <h2 className="text-3xl font-black text-slate-800">R$ {totalCommitted.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+            <h2 className="text-3xl font-black">R$ {totalCommitted.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
           </div>
 
           <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${amountTakenFromInvestment > 0 ? 'bg-amber-500 text-white shadow-amber-100' : 'bg-indigo-900 text-white shadow-indigo-100'}`}>
             <div className="flex justify-between items-center mb-6">
-              <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase tracking-widest">Reserva Líquida</span>
+              <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">Reserva Líquida</span>
               {amountTakenFromInvestment > 0 ? <ShieldAlert size={24} /> : <TrendingUp size={24} />}
             </div>
             <h2 className="text-3xl font-black">R$ {totalInvestedNet.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
@@ -432,7 +435,10 @@ const App = () => {
             <div className="space-y-2">
               {variableExpenses.map(e => (
                 <div key={e.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl group border border-transparent hover:border-slate-200 transition-all">
-                   <span className="font-black text-slate-700 text-sm">{e.desc}</span>
+                   <div className="flex items-center gap-3">
+                     <span className="text-slate-400">{expenseCategories.find(c => c.id === e.category)?.icon}</span>
+                     <span className="font-black text-slate-700 text-sm">{e.desc}</span>
+                   </div>
                    <div className="flex items-center gap-3">
                      <span className="font-black text-rose-500 text-sm">R$ {e.value.toFixed(2)}</span>
                      <button onClick={() => removeVariable(e.id)} className="text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
@@ -449,7 +455,7 @@ const App = () => {
             </div>
             <form onSubmit={addInvestment} className="flex gap-3 mb-8">
               <input type="text" placeholder="Valor para Investir" value={investValue} onChange={(e) => setInvestValue(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-emerald-600 outline-none" />
-              <button type="submit" className="bg-emerald-600 text-white px-8 rounded-2xl font-black hover:bg-emerald-700 transition-all">Aportar</button>
+              <button type="submit" className="bg-emerald-600 text-white px-8 rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">Aportar</button>
             </form>
             <div className="space-y-2">
               {rawInvestments.map(i => (
