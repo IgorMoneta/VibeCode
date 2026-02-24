@@ -16,6 +16,10 @@
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+        
+        /* Ajuste para inputs em iOS */
+        input, select { font-size: 16px !important; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
@@ -31,7 +35,7 @@
                     window.lucide.createIcons();
                 }
             }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className} stroke-width={strokeWidth}></i>;
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className} strokeWidth={strokeWidth}></i>;
         };
 
         const App = () => {
@@ -74,9 +78,9 @@
             const parseBrazilianValue = (val) => {
                 if (typeof val === 'string') {
                     const cleanVal = val.replace(/\./g, '').replace(',', '.');
-                    return parseFloat(cleanVal);
+                    return parseFloat(cleanVal) || 0;
                 }
-                return val;
+                return val || 0;
             };
 
             const totalInstallments = useMemo(() => {
@@ -111,7 +115,7 @@
                         const diff = (mY * 12 + mM) - (sY * 12 + sM);
                         return (diff >= 0 && diff < curr.totalMonths) ? acc + curr.value : acc;
                     }, 0);
-                    return { label: month, value: totalFixed + instForMonth + vExp, key: month };
+                    return { label: month.split('-')[1] + '/' + month.split('-')[0].slice(2), value: totalFixed + instForMonth + vExp, key: month };
                 });
             }, [monthlyData, totalFixed, installments]);
 
@@ -164,6 +168,11 @@
                 setInvestValue('');
             };
 
+            const removeFixed = (id) => setFixedExpenses(fixedExpenses.filter(e => e.id !== id));
+            const removeInstallment = (id) => setInstallments(installments.filter(e => e.id !== id));
+            const removeVariable = (id) => updateCurrentMonth({ expenses: variableExpenses.filter(e => e.id !== id) });
+            const removeInvest = (id) => updateCurrentMonth({ investments: rawInvestments.filter(i => i.id !== id) });
+
             const analyzePurchase = () => {
                 const price = parseBrazilianValue(productPrice);
                 if (isNaN(price) || price <= 0 || salary <= 0) return;
@@ -184,168 +193,208 @@
             };
 
             return (
-                <div className="min-h-screen p-4 md:p-8">
-                    <div className="max-w-6xl mx-auto">
-                        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                            <div>
-                                <h1 className="text-3xl font-black text-indigo-700 flex items-center gap-2">
-                                    <Icon name="wallet" size={32} /> Finanças Inteligentes
-                                </h1>
-                                <div className="flex items-center gap-2 mt-2 text-slate-500 font-bold bg-white w-fit px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
-                                    <Icon name="calendar" size={18} className="text-indigo-500" />
-                                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent focus:outline-none uppercase text-xs font-black cursor-pointer" />
-                                </div>
+                <div className="min-h-screen p-3 md:p-8 max-w-7xl mx-auto">
+                    {/* Header Responsivo */}
+                    <header className="mb-6 md:mb-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="text-center lg:text-left">
+                            <h1 className="text-2xl md:text-4xl font-black text-indigo-700 flex items-center justify-center lg:justify-start gap-3">
+                                <Icon name="wallet" size={36} /> Finanças <span className="hidden sm:inline">Inteligentes</span>
+                            </h1>
+                            <div className="flex items-center justify-center lg:justify-start gap-2 mt-3 text-slate-500 font-bold bg-white w-fit mx-auto lg:mx-0 px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
+                                <Icon name="calendar" size={18} className="text-indigo-500" />
+                                <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent focus:outline-none uppercase text-xs font-black cursor-pointer" />
                             </div>
-                            <div className="bg-white px-6 py-4 rounded-[2rem] shadow-sm border border-slate-200 flex items-center gap-4">
-                                <div className="bg-indigo-600 p-3 rounded-2xl text-white"><Icon name="dollar-sign" /></div>
-                                <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salário Disponível</p>
-                                    <input type="text" value={salary || ''} onChange={(e) => updateCurrentMonth({ salary: parseBrazilianValue(e.target.value) || 0 })} className="text-xl font-black bg-transparent focus:outline-none w-32 border-b-2 border-dashed border-slate-100 focus:border-indigo-500" placeholder="0,00" />
-                                </div>
+                        </div>
+                        
+                        <div className="bg-white px-5 py-4 rounded-[2rem] shadow-sm border border-slate-200 flex items-center gap-4 self-center lg:self-auto w-full max-w-sm">
+                            <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg"><Icon name="dollar-sign" /></div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salário Disponível</p>
+                                <input type="text" value={salary || ''} onChange={(e) => updateCurrentMonth({ salary: parseBrazilianValue(e.target.value) })} className="text-xl md:text-2xl font-black bg-transparent focus:outline-none w-full border-b-2 border-dashed border-slate-100 focus:border-indigo-500 transition-colors" placeholder="0,00" />
                             </div>
-                        </header>
+                        </div>
+                    </header>
 
-                        <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 mb-8 overflow-hidden">
-                            <h3 className="text-lg font-black mb-8 flex items-center gap-2 text-slate-700"><Icon name="trending-up" className="text-indigo-600" /> Tendência de Gastos</h3>
-                            <div className="relative h-[180px] w-full">
+                    {/* Gráfico Adaptável */}
+                    <section className="bg-white p-5 md:p-8 rounded-[2rem] md:rounded-[3rem] shadow-sm border border-slate-100 mb-6 md:mb-8 overflow-hidden">
+                        <h3 className="text-base md:text-lg font-black mb-6 md:mb-8 flex items-center gap-2 text-slate-700"><Icon name="trending-up" className="text-indigo-600" /> Evolução de Gastos</h3>
+                        <div className="relative h-[150px] md:h-[200px] w-full overflow-x-auto overflow-y-hidden custom-scrollbar">
+                            <div className="min-w-[600px] h-full">
                                 {chartData.length > 1 ? (
                                     <svg viewBox="0 0 800 200" className="w-full h-full" preserveAspectRatio="none">
                                         <path d={linePath} fill="none" stroke="#4f46e5" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-                                        {chartData.map((d, i) => (
-                                            <circle key={i} cx={40 + (i * 720 / (chartData.length - 1))} cy={160 - (d.value / maxExpenseInHistory * 120)} r={d.key === selectedMonth ? 8 : 5} fill={d.key === selectedMonth ? "#4f46e5" : "white"} stroke="#4f46e5" strokeWidth="4" />
-                                        ))}
+                                        {chartData.map((d, i) => {
+                                            const x = 40 + (i * 720 / (chartData.length - 1));
+                                            const y = 160 - (d.value / maxExpenseInHistory * 120);
+                                            return (
+                                                <g key={i} className="group cursor-pointer">
+                                                    <circle cx={x} cy={y} r={d.key === selectedMonth ? 8 : 5} fill={d.key === selectedMonth ? "#4f46e5" : "white"} stroke="#4f46e5" strokeWidth="4" />
+                                                    <text x={x} y="195" textAnchor="middle" className={`text-[11px] md:text-[12px] font-black ${d.key === selectedMonth ? 'fill-indigo-600' : 'fill-slate-400'}`}>{d.label}</text>
+                                                </g>
+                                            );
+                                        })}
                                     </svg>
-                                ) : <div className="flex h-full items-center justify-center text-slate-300 italic font-medium text-sm">Navegue pelos meses para ver a evolução.</div>}
+                                ) : <div className="flex h-full items-center justify-center text-slate-300 italic font-medium text-sm">Navegue pelos meses para ver a tendência.</div>}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Dash Cards - Flexíveis */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-12">
+                        <div className={`p-6 rounded-[2rem] md:rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${displayBalance > 0 ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-slate-200 text-slate-500 shadow-none'}`}>
+                            <span className="text-[10px] font-black bg-white/20 px-3 py-1 rounded-full uppercase w-fit">Saldo Livre</span>
+                            <h2 className="text-2xl md:text-3xl font-black mt-4">R$ {displayBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                        </div>
+                        <div className="bg-white p-6 rounded-[2rem] md:rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between">
+                            <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase w-fit">Comprometido</span>
+                            <h2 className="text-2xl md:text-3xl font-black mt-4 text-slate-800">R$ {totalCommitted.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                        </div>
+                        <div className={`p-6 rounded-[2rem] md:rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all sm:col-span-2 lg:col-span-1 ${amountTakenFromInvestment > 0 ? 'bg-amber-500 text-white shadow-amber-100' : 'bg-indigo-900 text-white shadow-indigo-100'}`}>
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase w-fit text-white">Reserva Líquida</span>
+                                {amountTakenFromInvestment > 0 && <Icon name="shield-alert" size={20} className="text-white animate-pulse" />}
+                            </div>
+                            <h2 className="text-2xl md:text-3xl font-black mt-4">R$ {totalInvestedNet.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10">
+                        {/* Seção Parcelas */}
+                        <section className="bg-white p-6 md:p-8 rounded-[2rem] border-2 border-indigo-50 shadow-sm order-2 lg:order-1">
+                            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><Icon name="layers" className="text-indigo-500" /> Parcelas Ativas</h3>
+                            <form onSubmit={addInstallment} className="flex flex-col gap-4 mb-8 bg-slate-50 p-5 md:p-6 rounded-3xl border border-dashed border-slate-200">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <input type="text" placeholder="Item parcelado" value={newInstallDesc} onChange={(e) => setNewInstallDesc(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
+                                    <input type="text" placeholder="R$ Valor Mensal" value={newInstallValue} onChange={(e) => setNewInstallValue(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold outline-none" />
+                                </div>
+                                <div className="flex gap-3">
+                                    <input type="number" placeholder="Meses" value={newInstallMonths} onChange={(e) => setNewInstallMonths(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm" />
+                                    <button type="submit" className="bg-indigo-600 text-white px-6 md:px-8 py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"><Icon name="plus" size={18}/><span className="hidden sm:inline">Salvar</span></button>
+                                </div>
+                            </form>
+                            <div className="space-y-3">
+                                {installments.length === 0 && <p className="text-center text-slate-300 py-6 italic text-sm">Organize as suas compras parceladas aqui.</p>}
+                                {installments.map(inst => {
+                                    const [sY, sM] = inst.startMonth.split('-').map(Number);
+                                    const [selY, selM] = selectedMonth.split('-').map(Number);
+                                    const diff = (selY * 12 + selM) - (sY * 12 + sM);
+                                    const isActive = diff >= 0 && diff < inst.totalMonths;
+                                    return (
+                                        <div key={inst.id} className={`flex justify-between items-center p-4 rounded-2xl border transition-all ${isActive ? 'bg-slate-50 border-slate-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+                                            <div className="min-w-0 flex-1 pr-4">
+                                                <p className="font-black text-slate-700 text-sm truncate">{inst.desc}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase">{isActive ? `Parc. ${diff + 1} de ${inst.totalMonths}` : 'Finalizada'}</p>
+                                            </div>
+                                            <div className="flex items-center gap-3 md:gap-5">
+                                                <span className="font-black text-sm whitespace-nowrap">R$ {inst.value.toFixed(2)}</span>
+                                                <button onClick={() => removeInstallment(inst.id)} className="text-slate-300 hover:text-rose-500 p-1"><Icon name="trash-2" size={16}/></button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </section>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                            <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${displayBalance > 0 ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-slate-200 text-slate-500'}`}>
-                                <span className="text-[10px] font-black bg-white/20 px-3 py-1 rounded-full uppercase w-fit">Saldo Livre</span>
-                                <h2 className="text-3xl font-black mt-4">R$ {displayBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-                            </div>
-                            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between">
-                                <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase w-fit">Comprometido</span>
-                                <h2 className="text-3xl font-black mt-4 text-slate-800">R$ {totalCommitted.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-                            </div>
-                            <div className={`p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between transition-all ${amountTakenFromInvestment > 0 ? 'bg-amber-500 text-white shadow-amber-100' : 'bg-indigo-900 text-white'}`}>
-                                <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase w-fit">Reserva Líquida</span>
-                                <h2 className="text-3xl font-black mt-4">R$ {totalInvestedNet.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-                            </div>
-                        </div>
+                        <div className="space-y-6 md:space-y-10 order-1 lg:order-2">
+                            {/* Simulador Mobile-First */}
+                            <section className="bg-slate-900 text-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-xl relative overflow-hidden">
+                                <h3 className="text-xl md:text-2xl font-black mb-4 flex items-center gap-3 text-indigo-100"><Icon name="shopping-bag" className="text-indigo-400" /> Simulador</h3>
+                                <p className="text-slate-400 text-[10px] font-bold uppercase mb-6">Proteção de Reserva Ativa</p>
+                                <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                                    <input type="text" placeholder="Valor do produto" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-white font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+                                    <button onClick={analyzePurchase} className="bg-indigo-600 hover:bg-indigo-500 px-8 py-4 rounded-2xl font-black transition-all shadow-xl shadow-indigo-600/20">Analisar</button>
+                                </div>
+                                {purchaseAnalysis && (
+                                    <div className={`p-6 rounded-3xl border-l-8 animate-in slide-in-from-top duration-300 ${purchaseAnalysis.type === 'success' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-rose-500/10 border-rose-500'}`}>
+                                        <div className="flex items-center gap-2 mb-2 font-black uppercase text-[10px]">
+                                            <Icon name={purchaseAnalysis.blockAtSight ? "shield-alert" : "check-circle-2"} size={16} className={purchaseAnalysis.blockAtSight ? "text-rose-400" : "text-emerald-400"} />
+                                            {purchaseAnalysis.blockAtSight ? "À Vista Negado" : "Analise Ok"}
+                                        </div>
+                                        <p className="text-sm font-bold mb-4 leading-tight">{purchaseAnalysis.message}</p>
+                                        {purchaseAnalysis.bestInstallment && (
+                                            <div className="bg-black/40 p-5 rounded-2xl border border-white/5 font-black text-xl md:text-2xl text-center sm:text-left">
+                                                {purchaseAnalysis.bestInstallment.count === 1 ? `Total: R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : `${purchaseAnalysis.bestInstallment.count}x de R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </section>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-                            <section className="bg-white p-8 rounded-[2.5rem] border-2 border-indigo-50 shadow-sm">
-                                <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><Icon name="layers" className="text-indigo-500" /> Parcelas Ativas</h3>
-                                <form onSubmit={addInstallment} className="flex flex-col gap-3 mb-6 bg-slate-50 p-6 rounded-3xl border border-dashed border-slate-200">
+                            {/* Gastos Fixos Layout Compacto */}
+                            <section className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+                                <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><Icon name="tv" className="text-indigo-500" /> Gastos Fixos</h3>
+                                <form onSubmit={addFixed} className="flex flex-col sm:flex-row gap-3 mb-6">
+                                    <input type="text" placeholder="Nome (ex: Netflix)" value={newFixedDesc} onChange={(e) => setNewFixedDesc(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-100" />
                                     <div className="flex gap-2">
-                                        <input type="text" placeholder="O que parcelou?" value={newInstallDesc} onChange={(e) => setNewInstallDesc(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm outline-none" />
-                                        <input type="text" placeholder="R$ Valor" value={newInstallValue} onChange={(e) => setNewInstallValue(e.target.value)} className="w-28 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm font-bold outline-none" />
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <input type="number" placeholder="Quantidade" value={newInstallMonths} onChange={(e) => setNewInstallMonths(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-3 text-sm" />
-                                        <button type="submit" className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all flex items-center gap-2"><Icon name="plus" size={18}/> Salvar</button>
+                                        <input type="text" placeholder="R$" value={newFixedValue} onChange={(e) => setNewFixedValue(e.target.value)} className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black" />
+                                        <button type="submit" className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"><Icon name="plus" /></button>
                                     </div>
                                 </form>
-                                <div className="space-y-3">
-                                    {installments.map(inst => {
-                                        const [sY, sM] = inst.startMonth.split('-').map(Number);
-                                        const [selY, selM] = selectedMonth.split('-').map(Number);
-                                        const diff = (selY * 12 + selM) - (sY * 12 + sM);
-                                        const isActive = diff >= 0 && diff < inst.totalMonths;
-                                        return (
-                                            <div key={inst.id} className={`flex justify-between items-center p-4 rounded-2xl border transition-all ${isActive ? 'bg-slate-50 border-slate-100' : 'opacity-40 grayscale'}`}>
-                                                <div><p className="font-black text-slate-700 text-sm">{inst.desc}</p><p className="text-[10px] text-slate-400 font-bold">{isActive ? `Parcela ${diff + 1} de ${inst.totalMonths}` : 'Fora da vigência'}</p></div>
-                                                <div className="flex items-center gap-4"><span className="font-black">R$ {inst.value.toFixed(2)}</span><button onClick={() => removeInstallment(inst.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={16}/></button></div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar">
+                                    {fixedExpenses.map(fixed => (
+                                        <div key={fixed.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group">
+                                            <span className="text-[10px] font-black uppercase truncate pr-2 text-slate-600">{fixed.desc}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-black text-slate-800">R$ {fixed.value.toFixed(2)}</span>
+                                                <button onClick={() => removeFixed(fixed.id)} className="text-slate-200 hover:text-rose-500 transition-colors"><Icon name="trash-2" size={14}/></button>
                                             </div>
-                                        );
-                                    })}
+                                        </div>
+                                    ))}
                                 </div>
                             </section>
+                        </div>
+                    </div>
 
-                            <div className="space-y-8">
-                                <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><Icon name="tv" className="text-indigo-500" /> Gastos Fixos</h3>
-                                    <form onSubmit={addFixed} className="flex gap-2 mb-6">
-                                        <input type="text" placeholder="Ex: Netflix" value={newFixedDesc} onChange={(e) => setNewFixedDesc(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none" />
-                                        <input type="text" placeholder="R$" value={newFixedValue} onChange={(e) => setNewFixedValue(e.target.value)} className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-black" />
-                                        <button type="submit" className="bg-indigo-600 text-white p-2 rounded-xl"><Icon name="plus" /></button>
-                                    </form>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {fixedExpenses.map(fixed => (
-                                            <div key={fixed.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex justify-between items-center group">
-                                                <span className="text-[10px] font-black uppercase truncate pr-2">{fixed.desc}</span>
-                                                <div className="flex items-center gap-2"><span className="text-xs font-black">R$ {fixed.value.toFixed(2)}</span><button onClick={() => removeFixed(fixed.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={12}/></button></div>
-                                            </div>
-                                        ))}
+                    {/* Rodapé Dinâmico: Variáveis e Investimentos */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 mt-6 md:mt-10 mb-20">
+                        <section className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Icon name="pie-chart" className="text-rose-500" /> Gastos do Mês</h3>
+                            <form onSubmit={addVariable} className="space-y-4 mb-8 bg-slate-50/50 p-5 rounded-3xl border border-slate-100">
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <select value={expenseCat} onChange={(e) => setExpenseCat(e.target.value)} className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-4 font-black outline-none appearance-none">
+                                        {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.id}</option>)}
+                                    </select>
+                                    <input type="text" placeholder="R$ Valor" value={expenseValue} onChange={(e) => setExpenseValue(e.target.value)} className="w-full sm:w-32 bg-white border border-slate-200 rounded-2xl px-5 py-4 font-black text-rose-600 outline-none" />
+                                </div>
+                                {expenseCat === 'Outros' && (
+                                    <input type="text" placeholder="O que você comprou?" value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3 font-medium outline-none" />
+                                )}
+                                <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-black transition-all shadow-lg">Lançar Gasto</button>
+                            </form>
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {variableExpenses.map(e => (
+                                    <div key={e.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl hover:bg-white border border-transparent hover:border-slate-200 transition-all group">
+                                       <span className="font-black text-slate-700 text-sm truncate pr-2">{e.desc}</span>
+                                       <div className="flex items-center gap-3 shrink-0">
+                                         <span className="font-black text-rose-500 text-sm">R$ {e.value.toFixed(2)}</span>
+                                         <button onClick={() => removeVariable(e.id)} className="text-slate-200 group-hover:text-rose-500 transition-colors"><Icon name="trash-2" size={16}/></button>
+                                       </div>
                                     </div>
-                                </section>
-
-                                <section className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-                                    <h3 className="text-2xl font-black mb-4 flex items-center gap-3 text-indigo-100"><Icon name="shopping-bag" className="text-indigo-400" /> Simulador</h3>
-                                    <div className="flex gap-3 mb-6">
-                                        <input type="text" placeholder="Valor do produto" value={productPrice} onChange={(e) => setProductPrice(e.target.value)} className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-white font-black outline-none focus:ring-2 focus:ring-indigo-500" />
-                                        <button onClick={analyzePurchase} className="bg-indigo-600 hover:bg-indigo-500 px-8 py-4 rounded-2xl font-black transition-all">Analisar</button>
-                                    </div>
-                                    {purchaseAnalysis && (
-                                        <div className={`p-6 rounded-3xl border-l-8 transition-all ${purchaseAnalysis.type === 'success' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-rose-500/10 border-rose-500'}`}>
-                                            <div className="flex items-center gap-2 mb-2 font-black uppercase text-[10px]">
-                                                <Icon name={purchaseAnalysis.blockAtSight ? "shield-alert" : "check-circle-2"} size={16} className={purchaseAnalysis.blockAtSight ? "text-rose-400" : "text-emerald-400"} />
-                                                {purchaseAnalysis.blockAtSight ? "À Vista Bloqueado" : "Analise Ok"}
-                                            </div>
-                                            <p className="text-sm font-bold mb-4">{purchaseAnalysis.message}</p>
-                                            {purchaseAnalysis.bestInstallment && (
-                                                <div className="bg-black/40 p-5 rounded-2xl border border-white/5 font-black text-2xl">
-                                                    {purchaseAnalysis.bestInstallment.count === 1 ? `Total: R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : `${purchaseAnalysis.bestInstallment.count}x de R$ ${purchaseAnalysis.bestInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </section>
+                                ))}
                             </div>
-                        </div>
+                        </section>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-                            <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                                <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Icon name="pie-chart" className="text-rose-500" /> Gastos Variáveis</h3>
-                                <form onSubmit={addVariable} className="space-y-4 mb-8">
-                                    <div className="flex gap-3">
-                                        <select value={expenseCat} onChange={(e) => setExpenseCat(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black outline-none">
-                                            {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.id}</option>)}
-                                        </select>
-                                        <input type="text" placeholder="R$ Valor" value={expenseValue} onChange={(e) => setExpenseValue(e.target.value)} className="w-32 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-rose-600 outline-none" />
+                        <section className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Icon name="coins" className="text-emerald-500" /> Reserva Mensal</h3>
+                            <div className="mb-6 bg-emerald-50 p-5 rounded-3xl border border-emerald-100 text-[11px] font-bold text-emerald-800 flex items-center gap-3 italic">
+                                <Icon name="target" size={20} className="text-emerald-500"/> Meta Mínima: R$ {MIN_INVESTMENT_GOAL.toLocaleString('pt-BR')}
+                            </div>
+                            <form onSubmit={addInvestment} className="flex gap-3 mb-8">
+                                <input type="text" placeholder="Valor do aporte" value={investValue} onChange={(e) => setInvestValue(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-100" />
+                                <button type="submit" className="bg-emerald-600 text-white px-6 md:px-8 rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-lg">Aportar</button>
+                            </form>
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {rawInvestments.map(i => (
+                                    <div key={i.id} className="flex justify-between items-center p-4 bg-emerald-50/40 rounded-2xl border border-emerald-100 group transition-all">
+                                        <span className="font-black text-emerald-900 text-sm italic truncate pr-2">Investimento Realizado</span>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <span className="font-black text-emerald-600 text-sm">R$ {i.value.toFixed(2)}</span>
+                                            <button onClick={() => removeInvest(i.id)} className="text-emerald-200 group-hover:text-rose-500 transition-colors"><Icon name="trash-2" size={16}/></button>
+                                        </div>
                                     </div>
-                                    <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black">Registrar Gasto</button>
-                                </form>
-                                <div className="space-y-2">
-                                    {variableExpenses.map(e => (
-                                        <div key={e.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-200">
-                                            <span className="font-black text-slate-700 text-sm">{e.desc}</span>
-                                            <div className="flex items-center gap-3"><span className="font-black text-rose-500 text-sm">R$ {e.value.toFixed(2)}</span><button onClick={() => removeVariable(e.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={16}/></button></div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-
-                            <section className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                                <h3 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3"><Icon name="coins" className="text-emerald-500" /> Reserva Mensal</h3>
-                                <div className="mb-6 bg-emerald-50 p-5 rounded-[2rem] border border-emerald-100 text-[11px] font-bold text-emerald-800 flex items-center gap-3 italic">
-                                    <Icon name="target" size={20} className="text-emerald-500"/> Meta: R$ {MIN_INVESTMENT_GOAL.toLocaleString('pt-BR')} (Auto-resgate ativo)
-                                </div>
-                                <form onSubmit={addInvestment} className="flex gap-3 mb-8">
-                                    <input type="text" placeholder="Valor para Investir" value={investValue} onChange={(e) => setInvestValue(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 font-black text-emerald-600 outline-none" />
-                                    <button type="submit" className="bg-emerald-600 text-white px-8 rounded-2xl font-black shadow-lg shadow-emerald-100">Aportar</button>
-                                </form>
-                                <div className="space-y-2">
-                                    {rawInvestments.map(i => (
-                                        <div key={i.id} className="flex justify-between items-center p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
-                                            <span className="font-black text-emerald-900 text-sm italic">Investimento</span>
-                                            <div className="flex items-center gap-3"><span className="font-black text-emerald-600 text-sm">R$ {i.value.toFixed(2)}</span><button onClick={() => removeInvest(i.id)} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={16}/></button></div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        </div>
+                                ))}
+                            </div>
+                        </section>
                     </div>
                 </div>
             );
